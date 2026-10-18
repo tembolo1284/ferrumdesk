@@ -13,12 +13,12 @@ pub mod risk;
 pub use events::{Event, MarketEvent, PositionEvent, RiskEvent};
 pub use ids::{InstrumentId, PositionId, QuoteId, TradeId};
 pub use instrument::{
-    BondFuture, DayCount, Frequency, Instrument, InstrumentKind, OvernightSwap, PayReceive,
-    Swaption, Tenor, TreasuryBond,
+    BondFuture, DayCount, Frequency, Instrument, InstrumentDef, InstrumentKind, OvernightSwap,
+    PayReceive, Swaption, Tenor, TreasuryBond,
 };
 pub use position::{Position, Side, Trade};
 pub use quote::{Quote, QuoteKind, QuoteSource, Timestamp};
-pub use risk::{BucketedDv01, RiskError, RiskResult};
+pub use risk::{BucketedDv01, PositionRisk, RiskError, RiskResult};
 
 /// Crate-wide error for parsing/validation of domain values.
 #[derive(Debug, thiserror::Error)]

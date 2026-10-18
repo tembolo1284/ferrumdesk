@@ -2,7 +2,7 @@ use crate::{InstrumentId, PositionId, Tenor, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, thiserror::Error, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize, Deserialize)]
 pub enum RiskError {
     #[error("missing quote: {0}")]
     MissingQuote(String),
