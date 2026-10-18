@@ -1,0 +1,31 @@
+[package]
+name = "fd-market"
+description = "Market data feeds, throttled immutable snapshots, and curve building for ferrumdesk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+fq = ["dep:fq-core", "dep:fq-rates"]   # use ferrumquant for bootstrap
+ws = ["dep:tungstenite", "dep:url"]
+
+[dependencies]
+fd-types.workspace = true
+fq-core  = { workspace = true, optional = true }
+fq-rates = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+rand = "0.8"
+csv = "1"
+tungstenite = { version = "0.24", optional = true }
+url = { version = "2", optional = true }
+
+[dev-dependencies]
+approx.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "fd-types"
+description = "UI-agnostic domain types shared across ferrumdesk crates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+approx.workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "fd-pricing"
+description = "Pricer trait, instrument pricers, and risk driver (ferrumquant adapter layer)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+fq = ["dep:fq-core", "dep:fq-rates", "fd-market/fq"]
+
+[dependencies]
+fd-types.workspace = true
+fd-market.workspace = true
+fq-core  = { workspace = true, optional = true }
+fq-rates = { workspace = true, optional = true }
+chrono.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+statrs = "0.17"
+
+[dev-dependencies]
+approx.workspace = true
