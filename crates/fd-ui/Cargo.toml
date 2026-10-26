@@ -1,0 +1,20 @@
+[package]
+name = "fd-ui"
+description = "egui/eframe front end for ferrumdesk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+fd-types.workspace = true
+fd-market.workspace = true
+fd-pricing.workspace = true
+fd-portfolio.workspace = true
+fd-engine.workspace = true
+egui.workspace = true
+eframe.workspace = true
+egui_extras.workspace = true
+egui_plot.workspace = true
+chrono.workspace = true
+tracing.workspace = true

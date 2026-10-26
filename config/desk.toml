@@ -1,0 +1,7 @@
+curve = "SOFR"
+book_file = "data/book.json"
+throttle_ms = 250
+risk_threads = 0
+
+[feed]
+kind = "sim"

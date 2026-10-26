@@ -68,7 +68,7 @@ pub enum Frequency { Annual, SemiAnnual, Quarterly, Monthly }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PayReceive { Pay, Receive }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum InstrumentKind { TreasuryBond, BondFuture, OvernightSwap, Swaption }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
