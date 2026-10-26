@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "as_of": "2026-10-26T15:15:24.052957530Z",
+  "as_of": "2026-10-26T15:40:55.369518715Z",
   "positions": [
     {
       "id": "8e50fdae-53c2-4d33-8923-8a254f4c9d5a",
@@ -11,6 +11,16 @@
       "realized_pnl": 0.0,
       "trade_count": 1,
       "last_update": "2026-10-26T15:14:15.802161595Z"
+    },
+    {
+      "id": "a95ab02d-c093-4334-984f-9719968d2c88",
+      "instrument": "UST-10Y",
+      "book": "CASH",
+      "net_quantity": -10000000.0,
+      "avg_price": 125.0,
+      "realized_pnl": 250000000.0,
+      "trade_count": 2,
+      "last_update": "2026-10-26T15:40:15.653860935Z"
     }
   ],
   "trades": [
@@ -23,11 +33,32 @@
       "ts": "2026-10-26T15:14:15.802161595Z",
       "trader": "paul",
       "book": "RATES"
+    },
+    {
+      "id": "29a6d0d2-198a-4468-9d45-5ac31494c592",
+      "instrument": "UST-10Y",
+      "side": "Buy",
+      "quantity": 10000000.0,
+      "price": 100.0,
+      "ts": "2026-10-26T15:39:51.743274737Z",
+      "trader": "paul",
+      "book": "CASH"
+    },
+    {
+      "id": "a1d41e89-1836-4c72-80fc-3b826aa3cb39",
+      "instrument": "UST-10Y",
+      "side": "Sell",
+      "quantity": 20000000.0,
+      "price": 125.0,
+      "ts": "2026-10-26T15:40:15.653860935Z",
+      "trader": "paul",
+      "book": "CASH"
     }
   ],
   "marks": {
     "sod": {
-      "8e50fdae-53c2-4d33-8923-8a254f4c9d5a": 0.015404868281253231
+      "8e50fdae-53c2-4d33-8923-8a254f4c9d5a": 0.015404868281253231,
+      "a95ab02d-c093-4334-984f-9719968d2c88": 1.0144788682121328
     }
   }
 }
