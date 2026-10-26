@@ -1,7 +1,39 @@
 curve = "SOFR"
 book_file = "data/book.json"
-throttle_ms = 250
-risk_threads = 0
+throttle_ms = 5000      # min gap between snapshots / reprices
+risk_threads = 0        # 0 = rayon default
 
 [feed]
 kind = "sim"
+interval_ms = 1000      # sim tick cadence
+
+# Booked at startup when the book is empty (skip with --no-seed)
+[[seed_trade]]
+instrument = "SOFR-2Y"
+side = "sell"
+quantity = 25000000
+price = 0.0385
+
+[[seed_trade]]
+instrument = "SOFR-5Y"
+side = "buy"
+quantity = 10000000
+price = 0.0375
+
+[[seed_trade]]
+instrument = "SOFR-10Y"
+side = "sell"
+quantity = 5000000
+price = 0.0390
+
+[[seed_trade]]
+instrument = "UST-10Y"
+side = "buy"
+quantity = 20000000
+price = 99.5
+
+[[seed_trade]]
+instrument = "SWPT-1Y5Y"
+side = "buy"
+quantity = 50000000
+price = 0.0

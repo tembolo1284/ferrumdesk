@@ -21,7 +21,7 @@ pub struct SimNode {
 }
 
 /// Random-walk simulator. Emits every node on the first tick so the first
-/// snapshot can bootstrap, then random subsets at `interval`.
+/// snapshot can bootstrap, then a random subset of nodes every `interval`.
 pub struct SimFeed {
     nodes: Vec<SimNode>,
     interval: Duration,
@@ -35,17 +35,27 @@ impl SimFeed {
         Self { nodes, interval, seed, hit_rate }
     }
 
-    /// Convenience: a plausible SOFR OIS strip.
-    pub fn sofr_demo() -> Self {
+    /// Demo universe: SOFR OIS strip + one UST yield + one swaption normal vol.
+    pub fn desk_demo(interval: Duration) -> Self {
         let strip = [("1M", 0.0430), ("3M", 0.0425), ("6M", 0.0418), ("1Y", 0.0405),
                      ("2Y", 0.0385), ("3Y", 0.0378), ("5Y", 0.0375), ("7Y", 0.0380),
                      ("10Y", 0.0390), ("20Y", 0.0410), ("30Y", 0.0405)];
-        let nodes = strip.iter().map(|(t, r)| SimNode {
+        let mut nodes: Vec<SimNode> = strip.iter().map(|(t, r)| SimNode {
             id: QuoteId::new(format!("SOFR-OIS-{t}")), kind: QuoteKind::ParRate,
             start: *r, vol: 0.00005, half_spread: 0.00025,
         }).collect();
-        Self::new(nodes, Duration::from_millis(100), 42, 0.3)
+        nodes.push(SimNode { id: QuoteId::new("UST-10Y"), kind: QuoteKind::Yield,
+            start: 0.0415, vol: 0.00006, half_spread: 0.00005 });
+        nodes.push(SimNode { id: QuoteId::new("VOL-SWPT-1Y5Y"), kind: QuoteKind::Vol,
+            start: 0.0085, vol: 0.00002, half_spread: 0.00010 });
+        Self::new(nodes, interval, 42, 0.3)
     }
+
+    /// Kept for the engine smoke test.
+    pub fn sofr_demo() -> Self { Self::desk_demo(Duration::from_millis(100)) }
+
+    pub fn with_seed(mut self, seed: u64) -> Self { self.seed = seed; self }
+    pub fn with_hit_rate(mut self, r: f64) -> Self { self.hit_rate = r.clamp(0.0, 1.0); self }
 }
 
 impl Feed for SimFeed {
@@ -60,7 +70,6 @@ impl Feed for SimFeed {
                 let now = Utc::now();
                 for (i, n) in self.nodes.iter().enumerate() {
                     if !first && rng.gen::<f64>() > self.hit_rate { continue; }
-                    // gaussian step via Box-Muller
                     let (u1, u2): (f64, f64) = (rng.gen::<f64>().max(1e-12), rng.gen());
                     let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
                     level[i] += n.vol * z;
@@ -69,7 +78,13 @@ impl Feed for SimFeed {
                     if tx.send(q).is_err() { return; }
                 }
                 first = false;
-                std::thread::sleep(self.interval);
+                // sleep in small slices so stop is honoured promptly even at long intervals
+                let mut left = self.interval;
+                while !left.is_zero() && !stop.load(Ordering::Relaxed) {
+                    let s = left.min(Duration::from_millis(50));
+                    std::thread::sleep(s);
+                    left -= s;
+                }
             }
         })?)
     }

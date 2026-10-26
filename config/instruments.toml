@@ -24,3 +24,20 @@ id = "SOFR-10Y"
 name = "SOFR 10Y OIS"
 tenor = "10Y"
 fixed_rate = 0.0390
+
+[[instrument]]
+kind = "treasury_bond"
+id = "UST-10Y"
+name = "UST 4.25 08/36"
+coupon = 0.0425
+issue_date = 2026-08-15
+maturity = 2036-08-15
+
+[[instrument]]
+kind = "swaption"
+id = "SWPT-1Y5Y"
+name = "1Y into 5Y payer"
+expiry_tenor = "1Y"
+swap_tenor = "5Y"
+strike = 0.0380
+side = "pay"

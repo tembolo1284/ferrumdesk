@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "as_of": "2026-10-26T15:15:24.052957530Z",
+  "positions": [
+    {
+      "id": "8e50fdae-53c2-4d33-8923-8a254f4c9d5a",
+      "instrument": "SOFR-5Y",
+      "book": "RATES",
+      "net_quantity": 10000000.0,
+      "avg_price": 0.0375,
+      "realized_pnl": 0.0,
+      "trade_count": 1,
+      "last_update": "2026-10-26T15:14:15.802161595Z"
+    }
+  ],
+  "trades": [
+    {
+      "id": "cfbf2f11-2a0e-4b14-8f49-4fb3fe4176f8",
+      "instrument": "SOFR-5Y",
+      "side": "Buy",
+      "quantity": 10000000.0,
+      "price": 0.0375,
+      "ts": "2026-10-26T15:14:15.802161595Z",
+      "trader": "paul",
+      "book": "RATES"
+    }
+  ],
+  "marks": {
+    "sod": {
+      "8e50fdae-53c2-4d33-8923-8a254f4c9d5a": 0.015404868281253231
+    }
+  }
+}
