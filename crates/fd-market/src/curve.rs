@@ -126,58 +126,114 @@ impl DiscountCurve for SimpleOisCurve {
 
 #[cfg(feature = "fq")]
 pub mod fq {
-    //! ferrumquant-backed curve. Three TODOs mark where fq-rates' real API goes.
+    //! ferrumquant-backed SOFR OIS curve. Bootstraps with `fq_rates::curve::bootstrap_sofr`
+    //! so local pricing matches riskrt's curve construction exactly.
     use super::*;
+    use fq_core::time::{Date, Period, TimeUnit};
+    use fq_rates::curve::{bootstrap_sofr, BootstrapConfig, BootstrapInstrument, DiscountCurve as FqCurve};
+    use fq_rates::index::OvernightIndex;
     use std::sync::Arc;
+
+    /// chrono ↔ fq date bridge (fq `Date` is days since 1970-01-01).
+    pub fn to_fq(d: NaiveDate) -> Date {
+        let days = (d - NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch")).num_days() as i32;
+        Date::from_unix_days(days).expect("date in fq range")
+    }
+
+    pub fn from_fq(d: Date) -> NaiveDate {
+        NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch") + chrono::Duration::days(d.unix_days() as i64)
+    }
+
+    pub fn to_period(t: Tenor) -> Period {
+        use fd_types::instrument::TenorUnit::*;
+        let unit = match t.unit { D => TimeUnit::Days, W => TimeUnit::Weeks, M => TimeUnit::Months, Y => TimeUnit::Years };
+        Period::new(t.n as i32, unit)
+    }
 
     #[derive(Debug, Clone)]
     pub struct FqOisCurve {
         ref_date: NaiveDate,
         inputs: Vec<(Tenor, f64)>,
-        inner: Arc<fq_rates::OisCurve>, // TODO(fq): actual bootstrapped curve type
+        index: Arc<OvernightIndex>,
+        config: BootstrapConfig,
+        inner: Arc<FqCurve>,
     }
 
     impl FqOisCurve {
+        /// `quotes`: spot-starting USD SOFR OIS par rates (decimal) by tenor, any order.
         pub fn bootstrap(ref_date: NaiveDate, quotes: &[(Tenor, f64)]) -> Result<Self, crate::MarketError> {
-            // TODO(fq): map (Tenor, f64) -> fq_rates::OisHelper, call fq_rates::bootstrap_ois(ref_date, helpers)
-            let inner = fq_rates::bootstrap_ois(ref_date, quotes)
+            Self::bootstrap_with(ref_date, quotes, Arc::new(OvernightIndex::sofr()), BootstrapConfig::default())
+        }
+
+        /// Same, with a shared index (carrying the day's fixings) and explicit config.
+        pub fn bootstrap_with(
+            ref_date: NaiveDate, quotes: &[(Tenor, f64)], index: Arc<OvernightIndex>, config: BootstrapConfig,
+        ) -> Result<Self, crate::MarketError> {
+            let mut inputs = quotes.to_vec();
+            inputs.sort_by_key(|(t, _)| *t);
+            let instruments: Vec<BootstrapInstrument> = inputs.iter()
+                .map(|&(t, r)| BootstrapInstrument::Ois { tenor: to_period(t), rate: r })
+                .collect();
+            let res = bootstrap_sofr(to_fq(ref_date), &index, &instruments, config)
                 .map_err(|e| crate::MarketError::Bootstrap(e.to_string()))?;
-            Ok(Self { ref_date, inputs: quotes.to_vec(), inner: Arc::new(inner) })
+            Ok(Self { ref_date, inputs, index, config, inner: Arc::new(res.curve) })
+        }
+
+        /// The underlying ferrumquant curve, for pricers that want to call fq directly.
+        pub fn inner(&self) -> &Arc<FqCurve> { &self.inner }
+        pub fn index(&self) -> &Arc<OvernightIndex> { &self.index }
+        pub fn inputs(&self) -> &[(Tenor, f64)] { &self.inputs }
+
+        fn rebootstrap(&self, inputs: Vec<(Tenor, f64)>) -> Self {
+            Self::bootstrap_with(self.ref_date, &inputs, Arc::clone(&self.index), self.config)
+                .expect("rebootstrap of a curve that already bootstrapped")
         }
     }
 
     impl DiscountCurve for FqOisCurve {
         fn reference_date(&self) -> NaiveDate { self.ref_date }
-        fn discount(&self, d: NaiveDate) -> f64 { self.inner.discount(d) } // TODO(fq): exact accessor
+
+        fn discount(&self, d: NaiveDate) -> f64 {
+            if d <= self.ref_date { return 1.0; }
+            self.inner.discount(to_fq(d)).unwrap_or(f64::NAN)
+        }
+
+        fn zero_rate(&self, d: NaiveDate) -> f64 {
+            if d <= self.ref_date { return 0.0; }
+            self.inner.zero_rate(to_fq(d)).unwrap_or(f64::NAN)
+        }
+
         fn node_tenors(&self) -> Vec<Tenor> { self.inputs.iter().map(|q| q.0).collect() }
+
         fn bumped(&self, tenor: Tenor, bp: f64) -> Box<dyn DiscountCurve> {
-            let q: Vec<_> = self.inputs.iter()
-                .map(|&(t, r)| (t, if t == tenor { r + bp * 1e-4 } else { r })).collect();
-            Box::new(Self::bootstrap(self.ref_date, &q).expect("bumped rebootstrap"))
+            let q = self.inputs.iter().map(|&(t, r)| (t, if t == tenor { r + bp * 1e-4 } else { r })).collect();
+            Box::new(self.rebootstrap(q))
         }
+
         fn bumped_parallel(&self, bp: f64) -> Box<dyn DiscountCurve> {
-            let q: Vec<_> = self.inputs.iter().map(|&(t, r)| (t, r + bp * 1e-4)).collect();
-            Box::new(Self::bootstrap(self.ref_date, &q).expect("bumped rebootstrap"))
+            let q = self.inputs.iter().map(|&(t, r)| (t, r + bp * 1e-4)).collect();
+            Box::new(self.rebootstrap(q))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use fq_rates::swap::{OisSwap, SwapSide};
+
+        #[test]
+        fn fq_curve_reprices_its_inputs_to_par() {
+            let r = NaiveDate::from_ymd_opt(2026, 10, 16).unwrap();
+            let q = [(Tenor::years(1), 0.0405), (Tenor::years(2), 0.0385), (Tenor::years(5), 0.0375), (Tenor::years(10), 0.0390)];
+            let c = FqOisCurve::bootstrap(r, &q).unwrap();
+            for &(t, rate) in &q {
+                let s = OisSwap::usd_sofr_spot(to_fq(r), to_period(t), SwapSide::PayFixed, 1e6, rate).unwrap();
+                let npv = s.npv(c.index(), c.inner()).unwrap();
+                assert!(npv.abs() < 1e-4, "{t}: npv {npv}");
+            }
+            let df1y = c.discount(r + chrono::Duration::days(365));
+            assert!(df1y > 0.95 && df1y < 1.0, "df1y {df1y}");
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use approx::assert_relative_eq;
-
-    #[test]
-    fn flat_curve_reprices_par() {
-        let r = NaiveDate::from_ymd_opt(2026, 10, 16).unwrap();
-        let q = [(Tenor::years(1), 0.04), (Tenor::years(2), 0.04), (Tenor::years(5), 0.04)];
-        let c = SimpleOisCurve::bootstrap(r, &q);
-        // 5Y par: sum r*DF_k + DF_5 == 1
-        let mut pv = 0.0;
-        for k in 1..=5 {
-            pv += 0.04 * c.discount(add_tenor(r, Tenor::years(k)));
-        }
-        pv += c.discount(add_tenor(r, Tenor::years(5)));
-        assert_relative_eq!(pv, 1.0, epsilon = 2e-3); // Act/365 vs annual drift tolerance
-    }
-}

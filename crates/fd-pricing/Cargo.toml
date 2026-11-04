@@ -14,7 +14,7 @@ fq = ["dep:fq-core", "dep:fq-rates", "fd-market/fq"]
 fd-types.workspace = true
 fd-market.workspace = true
 fq-core  = { workspace = true, optional = true }
-fq-rates = { workspace = true, optional = true }
+fq-rates = { workspace = true }
 chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
