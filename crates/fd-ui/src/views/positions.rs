@@ -1,7 +1,7 @@
 use crate::theme::{money, pnl_color, DOWN, MUTED};
 use crate::widgets::{cell, cell_colored, num_cell};
 use egui_extras::{Column, TableBuilder};
-use fd_engine::{Engine, StateSnapshot};
+use fd_engine::{RiskSource, SourceInfo, StateSnapshot};
 use fd_pricing::Universe;
 use fd_types::{Side, Trade, TradeId};
 
@@ -23,17 +23,20 @@ impl Default for TradeEntry {
     }
 }
 
-pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, engine: &Engine, universe: &Universe, entry: &mut TradeEntry) {
+pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, source: &dyn RiskSource, info: &SourceInfo, universe: &Universe, entry: &mut TradeEntry) {
     // ---- totals strip
     let p = &f.pnl;
     ui.horizontal(|ui| {
         ui.label("PV"); ui.monospace(money(p.total_pv));
         ui.separator();
-        ui.label("DV01"); ui.label(egui::RichText::new(money(p.total_dv01)).monospace().color(pnl_color(p.total_dv01)));
+        ui.label("DV01/+1bp"); ui.label(egui::RichText::new(money(p.total_dv01)).monospace().color(pnl_color(p.total_dv01)));
         ui.separator();
-        ui.label("Unrealized"); ui.label(egui::RichText::new(money(p.total_unrealized)).monospace().color(pnl_color(p.total_unrealized)));
+        ui.label("Cash"); ui.monospace(money(p.total_cash));
         ui.separator();
-        ui.label("Realized"); ui.label(egui::RichText::new(money(p.total_realized)).monospace().color(pnl_color(p.total_realized)));
+        ui.label("Day P&L"); ui.label(egui::RichText::new(money(p.day_pnl)).monospace().color(pnl_color(p.day_pnl)));
+        ui.separator();
+        ui.label("Total P&L"); ui.label(egui::RichText::new(money(p.total_pnl)).monospace().color(pnl_color(p.total_pnl)));
+        if p.pending > 0 { ui.separator(); ui.colored_label(MUTED, format!("{} pending", p.pending)); }
         if p.errors > 0 { ui.separator(); ui.colored_label(DOWN, format!("{} pricing errors", p.errors)); }
         ui.separator();
         ui.label(egui::RichText::new(format!("risk @ snap #{}", f.risk_seq)).color(MUTED));
@@ -53,14 +56,14 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, engine: &Engine, universe: &Un
         ui.label("qty"); ui.add(egui::TextEdit::singleline(&mut entry.quantity).desired_width(100.0));
         ui.label("px"); ui.add(egui::TextEdit::singleline(&mut entry.price).desired_width(80.0));
         ui.label("book"); ui.add(egui::TextEdit::singleline(&mut entry.book).desired_width(70.0));
-        if ui.button("Book").clicked() {
+        if ui.add_enabled(info.supports_booking, egui::Button::new("Book")).on_disabled_hover_text("read-only source").clicked() {
             entry.last_error = None;
             let parsed = (entry.quantity.trim().replace(',', "").parse::<f64>(), entry.price.trim().parse::<f64>());
             match parsed {
                 (Ok(q), Ok(px)) if !entry.instrument.is_empty() => {
                     let t = Trade { id: TradeId::new(), instrument: entry.instrument.as_str().into(), side: entry.side,
-                        quantity: q, price: px, ts: chrono::Utc::now(), trader: entry.trader.clone(), book: entry.book.clone() };
-                    if let Err(e) = engine.book_trade(t) { entry.last_error = Some(e.to_string()); }
+                        quantity: q, price: px, cash: 0.0, ts: chrono::Utc::now(), trader: entry.trader.clone(), book: entry.book.clone() };
+                    if let Err(e) = source.book_trade(t) { entry.last_error = Some(e.to_string()); }
                 }
                 _ => entry.last_error = Some("need instrument, numeric qty and price".into()),
             }
@@ -74,9 +77,9 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, engine: &Engine, universe: &Un
         .column(Column::initial(90.0)).column(Column::initial(60.0)).column(Column::initial(120.0))
         .column(Column::initial(110.0)).column(Column::initial(90.0)).column(Column::initial(100.0))
         .column(Column::initial(110.0)).column(Column::initial(90.0)).column(Column::initial(100.0))
-        .column(Column::initial(100.0)).column(Column::remainder())
+        .column(Column::initial(100.0)).column(Column::initial(100.0)).column(Column::remainder())
         .header(20.0, |mut h| {
-            for t in ["Pos", "Book", "Instrument", "Net Qty", "Avg Px", "Mark", "PV", "DV01", "Unreal", "Realized", "Status"] {
+            for t in ["Pos", "Book", "Instrument", "Net Qty", "Avg Px", "Mark", "PV", "DV01/+1bp", "Cash", "Day P&L", "Total P&L", "Status"] {
                 h.col(|ui| { ui.strong(t); });
             }
         })
@@ -91,11 +94,13 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, engine: &Engine, universe: &Un
                     num_cell(&mut row, l.mark.map(|m| format!("{m:.6}")).unwrap_or_default(), None, None);
                     num_cell(&mut row, l.pv.map(money).unwrap_or_default(), None, None);
                     num_cell(&mut row, l.dv01.map(money).unwrap_or_default(), None, l.dv01.map(pnl_color));
-                    num_cell(&mut row, l.unrealized.map(money).unwrap_or_default(), None, l.unrealized.map(pnl_color));
-                    num_cell(&mut row, money(l.realized), None, Some(pnl_color(l.realized)));
+                    num_cell(&mut row, money(l.cash), None, Some(MUTED));
+                    num_cell(&mut row, l.day_pnl.map(money).unwrap_or_default(), None, l.day_pnl.map(pnl_color));
+                    num_cell(&mut row, l.total_pnl.map(money).unwrap_or_default(), None, l.total_pnl.map(pnl_color));
                     match &l.error {
                         Some(e) => cell_colored(&mut row, e.as_str(), DOWN),
                         None if l.net_quantity == 0.0 => cell_colored(&mut row, "flat", MUTED),
+                        None if l.mark.is_none() => cell_colored(&mut row, "pending", MUTED),
                         None => cell(&mut row, "ok"),
                     }
                 });

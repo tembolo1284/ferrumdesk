@@ -1,14 +1,13 @@
 use crate::theme;
 use crate::views::{self, positions::TradeEntry, pricer::PricerPanel, Tab};
 use crate::widgets::Flash;
-use fd_engine::Engine;
-use fd_pricing::{Pricer, Universe};
+use fd_engine::RiskSource;
+use fd_pricing::Universe;
 use std::sync::Arc;
 use std::time::Duration;
 
 pub struct DeskApp {
-    engine: Engine,
-    pricer: Arc<dyn Pricer>,
+    source: Box<dyn RiskSource>,
     universe: Arc<Universe>,
     curve_name: String,
     tab: Tab,
@@ -19,16 +18,16 @@ pub struct DeskApp {
 }
 
 impl DeskApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, engine: Engine, pricer: Arc<dyn Pricer>,
+    pub fn new(cc: &eframe::CreationContext<'_>, source: Box<dyn RiskSource>,
                universe: Arc<Universe>, curve_name: String, book_path: Option<std::path::PathBuf>) -> Self {
         theme::apply(&cc.egui_ctx);
-        Self { engine, pricer, universe, curve_name, tab: Tab::Positions, flash: Flash::new(600),
+        Self { source, universe, curve_name, tab: Tab::Positions, flash: Flash::new(600),
                trade_entry: TradeEntry::default(), pricer_panel: PricerPanel::default(), book_path }
     }
 
     fn save_book(&self) {
         if let Some(p) = &self.book_path {
-            let g = self.engine.state.read();
+            let g = self.source.state().read();
             if let Err(e) = fd_portfolio::save_book(p, &g.book, &g.marks) { tracing::error!(%e, "save failed"); }
         }
     }
@@ -36,7 +35,8 @@ impl DeskApp {
 
 impl eframe::App for DeskApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let f = self.engine.state.frame();
+        let f = self.source.frame();
+        let info = self.source.info();
 
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -55,6 +55,12 @@ impl eframe::App for DeskApp {
                 let feed = if s.feed_connected { ("feed ●", theme::UP) } else { ("feed ○", theme::DOWN) };
                 ui.colored_label(feed.1, feed.0);
                 ui.separator();
+                let mode = match &info.mode {
+                    fd_engine::SourceMode::Local => "local (demo pricers)".to_string(),
+                    fd_engine::SourceMode::Remote { addr } => format!("riskrt {addr}"),
+                };
+                ui.label(format!("{mode} v{}", f.version));
+                ui.separator();
                 ui.label(format!("ticks {}/{}", s.ticks_accepted, s.ticks_received));
                 ui.separator();
                 ui.label(format!("snapshots {}", s.snapshots));
@@ -66,12 +72,12 @@ impl eframe::App for DeskApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| match self.tab {
-            Tab::Positions => views::positions::show(ui, &f, &self.engine, &self.universe, &mut self.trade_entry),
+            Tab::Positions => views::positions::show(ui, &f, self.source.as_ref(), &info, &self.universe, &mut self.trade_entry),
             Tab::Risk => views::risk::show(ui, &f, &self.universe, &self.curve_name),
             Tab::Market => views::market::show(ui, &f, &mut self.flash),
             Tab::Curve => views::curve::show(ui, &f, &self.curve_name),
-            Tab::Pricer => views::pricer::show(ui, &f, self.pricer.as_ref(), &self.universe, &mut self.pricer_panel),
-            Tab::Log => views::log::show(ui, &self.engine.state),
+            Tab::Pricer => views::pricer::show(ui, &f, self.source.as_ref(), &self.universe, &mut self.pricer_panel),
+            Tab::Log => views::log::show(ui, self.source.state()),
         });
 
         // steady refresh so flashes/ages animate even without input
@@ -80,6 +86,6 @@ impl eframe::App for DeskApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.save_book();
-        self.engine.shutdown();
+        self.source.shutdown();
     }
 }
