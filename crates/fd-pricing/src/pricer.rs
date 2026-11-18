@@ -53,6 +53,10 @@ pub struct Valuation {
 
 pub trait Pricer: Send + Sync {
     fn price(&self, id: &InstrumentId, snap: &MarketSnapshot) -> Result<RiskResult, RiskError>;
+
+    /// Signed cash a fill generates (received > 0), from the instrument's
+    /// economics. Settlement follows the valuation date (T+1 for UST).
+    fn trade_cash(&self, t: &fd_types::Trade, valuation_date: chrono::NaiveDate) -> Result<f64, RiskError>;
 }
 
 /// The one real implementation: dispatches on `Instrument` kind, then runs
@@ -79,6 +83,12 @@ impl DeskPricer {
 }
 
 impl Pricer for DeskPricer {
+    fn trade_cash(&self, t: &fd_types::Trade, valuation_date: chrono::NaiveDate) -> Result<f64, RiskError> {
+        let def = self.universe.get(&t.instrument)
+            .ok_or_else(|| RiskError::Pricer(format!("unknown instrument {}", t.instrument)))?;
+        Ok(crate::economics::trade_cash(&def.instrument, t, valuation_date + chrono::Duration::days(1)))
+    }
+
     fn price(&self, id: &InstrumentId, snap: &MarketSnapshot) -> Result<RiskResult, RiskError> {
         let t0 = Instant::now();
         let def = self.universe.get(id)
@@ -183,8 +193,10 @@ impl ZeroShift {
         match self.kind {
             ShiftKind::Parallel => 1.0,
             ShiftKind::Node { lo, mid, hi } => {
-                if t <= lo || t >= hi { if t >= mid && hi.is_infinite() { 1.0 } else { 0.0 } }
+                if t <= lo { 0.0 }
                 else if t <= mid { (t - lo) / (mid - lo) }
+                else if hi.is_infinite() { 1.0 }          // last node: flat beyond the node, never inf/inf
+                else if t >= hi { 0.0 }
                 else { (hi - t) / (hi - mid) }
             }
         }
@@ -214,4 +226,28 @@ pub(crate) fn nearest_tenor(tenors: &[Tenor], r: chrono::NaiveDate, mat: chrono:
         let db = (fd_market::curve::year_frac(r, fd_market::curve::add_tenor(r, **b)) - t).abs();
         da.partial_cmp(&db).unwrap()
     }).expect("non-empty tenors")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fd_market::SimpleOisCurve;
+
+    #[test]
+    fn last_node_zero_shift_is_finite_beyond_the_curve() {
+        let r = chrono::NaiveDate::from_ymd_opt(2026, 10, 16).unwrap();
+        let q = [(Tenor::years(1), 0.04), (Tenor::years(5), 0.04), (Tenor::years(10), 0.04)];
+        let base: Arc<dyn DiscountCurve> = Arc::new(SimpleOisCurve::bootstrap(r, &q));
+        let bumped = ZeroShift::node(base.clone(), Tenor::years(10), 1.0);
+        for days in [365 * 10 + 2, 365 * 12, 365 * 40] {
+            let d = r + chrono::Duration::days(days);
+            let df = bumped.discount(d);
+            assert!(df.is_finite() && df > 0.0 && df < base.discount(d), "{days}d: {df}");
+        }
+        // interior node: tent weight, zero outside neighbours
+        let mid = ZeroShift::node(base.clone(), Tenor::years(5), 1.0);
+        let far = fd_market::curve::add_tenor(r, Tenor::years(10));
+        assert!((mid.discount(far) - base.discount(far)).abs() < 1e-12);
+        assert!((mid.discount(far + chrono::Duration::days(3000)) - base.discount(far + chrono::Duration::days(3000))).abs() < 1e-12);
+    }
 }

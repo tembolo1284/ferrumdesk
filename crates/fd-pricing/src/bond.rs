@@ -45,7 +45,8 @@ pub fn yield_from_price(b: &TreasuryBond, settle: chrono::NaiveDate, clean: f64)
 }
 
 /// Marks off the bond's own yield/price quote. PV per unit face = dirty/100.
-/// DV01 analytic from yield (per 1bp, per unit face).
+/// DV01 = PV change for a +1bp yield move, per unit face (negative for a long),
+/// the same convention as the curve path and riskrt.
 pub fn value(b: &TreasuryBond, ctx: &PriceCtx) -> Result<Valuation, RiskError> {
     let settle = ctx.snap.valuation_date + chrono::Duration::days(1); // T+1 UST
     let qid = quote_keys::mark(ctx.id);
@@ -58,6 +59,25 @@ pub fn value(b: &TreasuryBond, ctx: &PriceCtx) -> Result<Valuation, RiskError> {
     let (dirty, _) = price_from_yield(b, settle, y);
     let (up, _) = price_from_yield(b, settle, y + 1e-4);
     let (dn, _) = price_from_yield(b, settle, y - 1e-4);
-    let dv01 = (dn - up) / 2.0 / b.face; // positive for a long
+    let dv01 = (up - dn) / 2.0 / b.face;
     Ok(Valuation { pv: dirty / b.face, vega: None, fair_quote: Some(y), analytic_dv01: Some(dv01) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fd_types::{DayCount, Frequency};
+    #[test]
+    fn long_bond_dv01_is_negative_pv_change_for_plus_1bp() {
+        let b = TreasuryBond { coupon: 0.0425, issue_date: chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap(),
+            maturity: chrono::NaiveDate::from_ymd_opt(2036, 8, 15).unwrap(), frequency: Frequency::SemiAnnual,
+            day_count: DayCount::ActAct, face: 100.0 };
+        let settle = chrono::NaiveDate::from_ymd_opt(2026, 10, 17).unwrap();
+        let (p0, _) = price_from_yield(&b, settle, 0.0415);
+        let (up, _) = price_from_yield(&b, settle, 0.0416);
+        let (dn, _) = price_from_yield(&b, settle, 0.0414);
+        let dv01 = (up - dn) / 2.0 / b.face;
+        assert!(dv01 < 0.0 && dv01 > -0.001, "{dv01}");
+        assert!(p0 > 95.0 && p0 < 105.0);
+    }
 }
