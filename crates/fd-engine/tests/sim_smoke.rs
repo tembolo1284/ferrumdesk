@@ -24,7 +24,7 @@ fn sim_pipeline_reprices_a_swap() {
     let eng = Engine::start(cfg, Box::new(SimFeed::sofr_demo()), pricer, Book::new(), Marks::default()).unwrap();
 
     eng.book_trade(Trade { id: TradeId::new(), instrument: "SOFR-5Y".into(), side: Side::Buy,
-        quantity: 10_000_000.0, price: 0.0375, ts: chrono::Utc::now(), trader: "paul".into(), book: "RATES".into() }).unwrap();
+        quantity: 10_000_000.0, price: 0.0375, cash: 0.0, ts: chrono::Utc::now(), trader: "paul".into(), book: "RATES".into() }).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(1500));
     let f = eng.state.frame();

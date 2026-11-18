@@ -4,6 +4,7 @@
 pub mod bond;
 pub mod bond_future;
 pub mod convert;
+pub mod economics;
 pub mod jacobian;
 pub mod pricer;
 pub mod schedule;

@@ -13,6 +13,9 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, flash: &mut Flash) {
         ui.label(format!("snapshot #{}", snap.seq));
         ui.label(egui::RichText::new(snap.ts.format("%H:%M:%S%.3f").to_string()).color(MUTED));
         ui.label(format!("{} quotes", quotes.len()));
+        let snap_age = (chrono::Utc::now() - snap.ts).num_milliseconds();
+        let c = if snap_age > 15_000 { crate::theme::DOWN } else { MUTED };
+        ui.colored_label(c, format!("snapshot age {snap_age}ms"));
     });
 
     TableBuilder::new(ui).striped(true)
@@ -29,7 +32,7 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, flash: &mut Flash) {
                     QuoteKind::ParRate | QuoteKind::Yield | QuoteKind::Fixing | QuoteKind::Vol => format!("{:.4}", x * 100.0),
                     QuoteKind::Price | QuoteKind::FuturesPrice => format!("{x:.4}"),
                 };
-                let age = (snap.ts - q.ts).num_milliseconds();
+                let age = (chrono::Utc::now() - q.ts).num_milliseconds();
                 body.row(18.0, |mut row| {
                     cell(&mut row, q.id.as_str());
                     cell(&mut row, format!("{:?}", q.kind));

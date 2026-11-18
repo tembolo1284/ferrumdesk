@@ -48,5 +48,5 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, universe: &Universe, curve_nam
             }
         });
     ui.add_space(6.0);
-    ui.label(egui::RichText::new("Ladder = par-quote bucketed DV01 (Jacobian); Total = parallel zero-rate DV01. They differ slightly by construction.").color(crate::theme::MUTED));
+    ui.label(egui::RichText::new("All DV01 = PV change for +1bp (long bond / receiver swap negative). Ladder = par-quote buckets via Jacobian; Total = parallel zero-rate shift. They differ slightly by construction.").color(crate::theme::MUTED));
 }

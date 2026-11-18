@@ -8,5 +8,5 @@ pub mod store;
 
 pub use aggregate::{Aggregate, RollupKey};
 pub use book::{Book, BookError};
-pub use pnl::{Marks, PnlLine, PnlSummary};
+pub use pnl::{Marks, PnlLine, PnlSummary, SodMark};
 pub use store::{load_book, save_book, BookFile};

@@ -13,6 +13,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+/// Send with a stop check so a feed never parks forever in `send` on a full
+/// channel after the consumer has gone (the shutdown-join deadlock).
+/// Returns false when the feed should exit.
+pub fn send_or_stop(tx: &Sender<Quote>, mut q: Quote, stop: &AtomicBool) -> bool {
+    loop {
+        if stop.load(Ordering::Relaxed) { return false; }
+        match tx.send_timeout(q, std::time::Duration::from_millis(50)) {
+            Ok(()) => return true,
+            Err(crossbeam_channel::SendTimeoutError::Timeout(back)) => q = back,
+            Err(crossbeam_channel::SendTimeoutError::Disconnected(_)) => return false,
+        }
+    }
+}
+
 /// A quote source. Implementations spawn their own thread and push into `tx`
 /// until `stop` is set. Keeps feeds swappable from config without the engine caring.
 pub trait Feed: Send {

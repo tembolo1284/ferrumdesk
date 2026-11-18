@@ -61,7 +61,7 @@ impl Feed for ReplayFeed {
                         (Some(m), None) | (None, Some(m)) => Quote::mid_only(id, kind, m, ts, QuoteSource::Replay),
                         (None, None) => continue,
                     };
-                    if tx.send(q).is_err() { return; }
+                    if !super::send_or_stop(&tx, q, &stop) { return; }
                 }
                 if !self.loop_forever { return; }
             }

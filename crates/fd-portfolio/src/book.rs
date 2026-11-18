@@ -7,6 +7,8 @@ pub enum BookError {
     UnknownPosition(PositionId),
     #[error("trade quantity must be > 0")]
     BadQuantity,
+    #[error("cannot compute trade cash: {0}")]
+    Economics(String),
 }
 
 /// One position per (instrument, book-name). Trades are retained for the
@@ -99,23 +101,26 @@ mod tests {
     use fd_types::{Side, TradeId};
 
     fn t(inst: &str, side: Side, qty: f64, px: f64) -> Trade {
-        Trade { id: TradeId::new(), instrument: inst.into(), side, quantity: qty, price: px,
+        // bond-style cash for the test: -signed_qty * px / 100
+        let cash = -side.sign() * qty * px / 100.0;
+        Trade { id: TradeId::new(), instrument: inst.into(), side, quantity: qty, price: px, cash,
                 ts: chrono::Utc::now(), trader: "paul".into(), book: "RATES".into() }
     }
 
     #[test]
-    fn open_close_realizes() {
+    fn open_close_leaves_cash_as_the_pnl() {
         let mut b = Book::new();
-        b.book_trade(t("UST-10Y", Side::Buy, 10.0, 99.0)).unwrap();
-        b.book_trade(t("UST-10Y", Side::Buy, 10.0, 101.0)).unwrap();
+        b.book_trade(t("UST-10Y", Side::Buy, 1_000_000.0, 99.0)).unwrap();
+        b.book_trade(t("UST-10Y", Side::Buy, 1_000_000.0, 101.0)).unwrap();
         let p = b.position_for(&"UST-10Y".into(), "RATES").unwrap();
-        assert_eq!(p.net_quantity, 20.0);
+        assert_eq!(p.net_quantity, 2_000_000.0);
         assert!((p.avg_price - 100.0).abs() < 1e-12);
 
-        let ev = b.book_trade(t("UST-10Y", Side::Sell, 20.0, 102.0)).unwrap();
+        let ev = b.book_trade(t("UST-10Y", Side::Sell, 2_000_000.0, 102.0)).unwrap();
         let p = b.position_for(&"UST-10Y".into(), "RATES").unwrap();
         assert!(p.is_flat());
-        assert!((p.realized_pnl - 40.0).abs() < 1e-12);
+        // bought 2mm @ avg 100, sold 2mm @ 102: flat, +40,000 cash = the realized P&L
+        assert!((p.cash - 40_000.0).abs() < 1e-6, "cash {}", p.cash);
         assert!(matches!(ev.last(), Some(PositionEvent::PositionClosed(_))));
         assert_eq!(b.open_positions().count(), 0);
     }

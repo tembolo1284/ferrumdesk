@@ -75,7 +75,7 @@ impl Feed for SimFeed {
                     level[i] += n.vol * z;
                     let q = Quote::two_sided(n.id.clone(), n.kind, level[i] - n.half_spread,
                                              level[i] + n.half_spread, now, QuoteSource::Sim);
-                    if tx.send(q).is_err() { return; }
+                    if !super::send_or_stop(&tx, q, &stop) { return; }
                 }
                 first = false;
                 // sleep in small slices so stop is honoured promptly even at long intervals

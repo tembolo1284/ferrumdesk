@@ -45,7 +45,7 @@ impl Feed for WsFeed {
                         (Some(m), None) | (None, Some(m)) => Quote::mid_only(id, f.kind, m, Utc::now(), QuoteSource::Ws),
                         _ => continue,
                     };
-                    if tx.send(q).is_err() { return; }
+                    if !super::send_or_stop(&tx, q, &stop) { return; }
                 }
             }
         })?)

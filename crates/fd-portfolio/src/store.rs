@@ -18,7 +18,7 @@ pub struct BookFile {
 
 pub fn save_book(path: impl AsRef<Path>, book: &Book, marks: &Marks) -> std::io::Result<()> {
     let f = BookFile {
-        version: 1,
+        version: 2,
         as_of: Some(chrono::Utc::now()),
         positions: book.all_positions().cloned().collect(),
         trades: book.trades().to_vec(),
@@ -31,6 +31,16 @@ pub fn save_book(path: impl AsRef<Path>, book: &Book, marks: &Marks) -> std::io:
 
 pub fn load_book(path: impl AsRef<Path>) -> std::io::Result<(Book, Marks)> {
     let bytes = std::fs::read(path)?;
-    let f: BookFile = serde_json::from_slice(&bytes)?;
-    Ok((Book::from_parts(f.positions, f.trades), f.marks))
+    match serde_json::from_slice::<BookFile>(&bytes) {
+        Ok(f) if f.version >= 2 => Ok((Book::from_parts(f.positions, f.trades), f.marks)),
+        _ => {
+            // v1 files carried per-unit SOD marks and realized_pnl; neither maps onto
+            // the cash ledger, so rebuild positions from the trade log and start marks fresh.
+            #[derive(Deserialize)]
+            struct Legacy { trades: Vec<Trade> }
+            let l: Legacy = serde_json::from_slice(&bytes)?;
+            tracing::warn!("book file is v1: rebuilt from {} trades with zero cash; SOD marks reset", l.trades.len());
+            Ok((Book::from_trades(l.trades), Marks::default()))
+        }
+    }
 }

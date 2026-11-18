@@ -21,10 +21,10 @@ pub fn show(ui: &mut egui::Ui, f: &StateSnapshot, curve_name: &str) {
     }).collect();
 
     ui.label(format!("{curve_name} — zero curve (cc, Act/365), ref {r}"));
-    Plot::new("zero_curve").height(320.0).x_axis_label("years").y_axis_label("%")
+    Plot::new("zero_curve").height(320.0_f32).x_axis_label("years").y_axis_label("%")
         .show(ui, |p| {
             p.line(Line::new(dense).color(ACCENT).name("zero"));
-            p.points(Points::new(nodes).radius(3.5).name("nodes"));
+            p.points(Points::new(nodes).radius(3.5_f32).name("nodes"));
         });
 
     egui::Grid::new("curve_nodes").striped(true).show(ui, |ui| {

@@ -10,7 +10,8 @@ pub fn conversion_factor(b: &TreasuryBond, delivery: chrono::NaiveDate) -> f64 {
     clean / b.face
 }
 
-/// PV per contract = price × size/100. DV01 per contract = CTD DV01 × size / CF.
+/// PV per contract = price × size/100. DV01 per contract = CTD DV01 × size / CF,
+/// as PV change for +1bp (negative for a long).
 /// CTD = min(price − fut×CF) over quoted deliverables; falls back to the first.
 pub fn value(f: &BondFuture, ctx: &PriceCtx) -> Result<Valuation, RiskError> {
     let qid = quote_keys::mark(ctx.id);
@@ -36,7 +37,7 @@ pub fn value(f: &BondFuture, ctx: &PriceCtx) -> Result<Valuation, RiskError> {
         let basis = clean - fut * cf;
         let (up, _) = price_from_yield(b, settle, y + 1e-4);
         let (dn, _) = price_from_yield(b, settle, y - 1e-4);
-        let dv01 = (dn - up) / 2.0 / b.face;
+        let dv01 = (up - dn) / 2.0 / b.face;
         if best.map_or(true, |(bb, _)| basis < bb) { best = Some((basis, dv01 / cf)); }
     }
     let dv01_per_unit = best.map(|b| b.1).unwrap_or(0.0);

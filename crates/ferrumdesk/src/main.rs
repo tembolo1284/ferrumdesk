@@ -82,7 +82,7 @@ fn main() -> Result<()> {
             let side = if s.side.eq_ignore_ascii_case("sell") { fd_types::Side::Sell } else { fd_types::Side::Buy };
             engine.book_trade(fd_types::Trade {
                 id: fd_types::TradeId::new(), instrument: s.instrument.as_str().into(), side,
-                quantity: s.quantity, price: s.price, ts: chrono::Utc::now(),
+                quantity: s.quantity, price: s.price, cash: 0.0, ts: chrono::Utc::now(),
                 trader: "seed".into(), book: "RATES".into(),
             })?;
         }
@@ -96,6 +96,6 @@ fn main() -> Result<()> {
         ..Default::default()
     };
     eframe::run_native("ferrumdesk", opts, Box::new(move |cc| {
-        Ok(Box::new(fd_ui::DeskApp::new(cc, engine, pricer, universe, curve_name, book_path)))
+        Ok(Box::new(fd_ui::DeskApp::new(cc, Box::new(engine), universe, curve_name, book_path)))
     })).map_err(|e| anyhow::anyhow!("{e}"))
 }
