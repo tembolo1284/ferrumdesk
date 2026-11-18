@@ -33,6 +33,8 @@ pub struct Inner {
     /// Per-unit risk keyed by position, for the snapshot seq in `risk_seq`.
     pub risk: HashMap<PositionId, Result<RiskResult, String>>,
     pub risk_seq: u64,
+    /// Source's own version counter: snapshot seq locally, riskrt curve-set version remotely.
+    pub version: u64,
     pub stats: Stats,
     pub log: VecDeque<LogLine>,
 }
@@ -46,6 +48,7 @@ pub struct StateSnapshot {
     pub pnl: PnlSummary,
     pub risk: HashMap<PositionId, Result<RiskResult, String>>,
     pub risk_seq: u64,
+    pub version: u64,
     pub stats: Stats,
     pub book: Book,
 }
@@ -67,6 +70,7 @@ impl EngineState {
             pnl: PnlSummary::build(g.book.all_positions(), &g.risk, &g.marks),
             risk: g.risk.clone(),
             risk_seq: g.risk_seq,
+            version: g.version,
             stats: g.stats.clone(),
             book: g.book.clone(),
         }

@@ -126,7 +126,6 @@ impl PnlSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fd_types::*;
 
     fn risk(id: &str, pv_unit: f64) -> RiskResult {
         RiskResult { instrument: id.into(), pv: pv_unit, dv01: -0.0004, bucketed: Default::default(),

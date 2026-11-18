@@ -25,7 +25,11 @@ pub fn run(
             Ok(Event::Position(PositionEvent::PositionChanged(_))) => dirty = true,
             Ok(Event::Shutdown) => return,
             Ok(_) => {}
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                // Version reconciliation: never depend on having seen every bus event.
+                let g = state.read();
+                if g.snapshot.as_ref().is_some_and(|s| s.seq > g.risk_seq) { dirty = true; }
+            }
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return,
         }
         // drain anything queued so we reprice once against the latest snapshot
@@ -57,12 +61,16 @@ fn reprice(state: &EngineState, bus: &Bus, pricer: &dyn Pricer) {
     let n = results.len();
     {
         let mut g = state.write();
+        let g = &mut *g;
         g.risk.clear();
         for r in &results {
-            if let Ok(ok) = &r.result { g.marks.capture(r.position, ok.pv); }
+            if let Ok(ok) = &r.result {
+                if let Some(p) = g.book.position(&r.position) { g.marks.capture_existing(p, ok.pv); }
+            }
             g.risk.insert(r.position, r.result.clone().map_err(|e| e.to_string()));
         }
         g.risk_seq = snap.seq;
+        g.version = snap.seq;
         g.stats.reprices += 1;
         g.stats.last_reprice_us = elapsed_us;
         g.stats.positions_priced = n;

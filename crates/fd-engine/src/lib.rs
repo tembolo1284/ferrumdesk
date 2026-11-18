@@ -4,10 +4,12 @@
 pub mod bus;
 pub mod risk_loop;
 pub mod runtime;
+pub mod source;
 pub mod state;
 
 pub use bus::{Bus, Subscription};
 pub use runtime::{Engine, EngineConfig};
+pub use source::{RiskSource, SourceInfo, SourceMode};
 pub use state::{EngineState, LogLine, StateSnapshot, Stats};
 
 #[derive(Debug, thiserror::Error)]
@@ -18,4 +20,8 @@ pub enum EngineError {
     Book(#[from] fd_portfolio::BookError),
     #[error("engine not running")]
     NotRunning,
+    #[error("{0} is not supported by this risk source")]
+    Unsupported(&'static str),
+    #[error("remote engine: {0}")]
+    Remote(String),
 }

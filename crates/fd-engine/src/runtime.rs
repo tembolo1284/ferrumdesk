@@ -41,6 +41,9 @@ impl Default for EngineConfig {
 pub struct Engine {
     pub state: EngineState,
     pub bus: Bus,
+    pricer: Arc<dyn Pricer>,
+    valuation_date: chrono::NaiveDate,
+    curve_names: Vec<String>,
     stop: Arc<AtomicBool>,
     feed: Option<FeedHandle>,
     threads: Vec<JoinHandle<()>>,
@@ -112,18 +115,35 @@ impl Engine {
         let risk_thread = {
             let (state, bus, stop) = (state.clone(), bus.clone(), stop.clone());
             let sub = bus.subscribe(cfg.bus_capacity);
+            let pricer = pricer.clone();
             std::thread::Builder::new().name("fd-risk".into())
                 .spawn(move || risk_loop::run(state, bus, sub, pricer, stop))
                 .expect("spawn risk thread")
         };
 
-        Ok(Self { state, bus, stop, feed: Some(feed), threads: vec![market_thread, risk_thread] })
+        Ok(Self {
+            state, bus, pricer,
+            valuation_date: cfg.valuation_date,
+            curve_names: cfg.curves.iter().map(|c| c.name.clone()).collect(),
+            stop, feed: Some(feed), threads: vec![market_thread, risk_thread],
+        })
     }
 
     /// Book a trade from the UI. Publishes position events; the risk loop
     /// picks up PositionChanged and reprices against the current snapshot.
-    pub fn book_trade(&self, t: Trade) -> Result<(), EngineError> {
-        let events = self.state.write().book.book_trade(t)?;
+    pub fn book_trade(&self, mut t: Trade) -> Result<(), EngineError> {
+        let val = self.valuation_date;
+        t.cash = self.pricer.trade_cash(&t, val).map_err(|e| EngineError::Book(fd_portfolio::BookError::Economics(e.to_string())))?;
+        let events = {
+            let mut g = self.state.write();
+            let was_open = g.book.position_for(&t.instrument, &t.book).is_some();
+            let events = g.book.book_trade(t)?;
+            if !was_open {
+                // opened this session: day P&L counts from zero
+                if let Some(fd_types::PositionEvent::PositionChanged(pid)) = events.get(1) { g.marks.mark_new(*pid); }
+            }
+            events
+        };
         for ev in events { self.bus.publish(ev); }
         Ok(())
     }
@@ -141,4 +161,23 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) { self.shutdown(); }
+}
+
+impl crate::source::RiskSource for Engine {
+    fn info(&self) -> crate::source::SourceInfo {
+        crate::source::SourceInfo {
+            name: "local".into(),
+            mode: crate::source::SourceMode::Local,
+            supports_booking: true,
+            curve_names: self.curve_names.clone(),
+        }
+    }
+    fn state(&self) -> &EngineState { &self.state }
+    fn book_trade(&self, t: Trade) -> Result<(), EngineError> { Engine::book_trade(self, t) }
+    fn price(&self, id: &fd_types::InstrumentId) -> Result<fd_types::RiskResult, fd_types::RiskError> {
+        let snap = self.state.read().snapshot.clone()
+            .ok_or_else(|| fd_types::RiskError::NoCurve("no snapshot yet".into()))?;
+        self.pricer.price(id, &snap)
+    }
+    fn shutdown(&mut self) { Engine::shutdown(self) }
 }
